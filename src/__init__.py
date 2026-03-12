@@ -1,2 +1,1 @@
-"""Moonstone - Desktop app for bol-van/zapret."""
-
+"""Sakura Flow - Optimized desktop app for bol-van/zapret."""
