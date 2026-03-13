@@ -1,19 +1,30 @@
-"""UI/Tray interface functions for Sakura Flow."""
+"""UI/Tray interface functions for Sakura Flow by Ekcler."""
 import subprocess
 import re
 import sys
 import threading
+import ctypes
+from pathlib import Path
+
 from PyQt5.QtWidgets import (QApplication, QSystemTrayIcon, QMenu, QAction, 
                              QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLineEdit, QTextEdit, QLabel, QMessageBox)
 from PyQt5.QtGui import QIcon, QFont, QCursor
 from PyQt5.QtCore import Qt, QTimer
 
+# --- ФИКС ИКОНКИ В ПАНЕЛИ ЗАДАЧ (Taskbar Icon Fix) ---
 try:
-    from .config import ICON_PATH, CHECK_ICON_PATH
+    myappid = 'ekcler.sakuraflow.v1.2'
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+except Exception:
+    pass
+
+# Импорты проекта
+try:
+    from .config import ICON_PATH, CHECK_ICON_PATH, BASE_DIR
     from . import service, autostart, state, tools
 except ImportError:
-    from src.config import ICON_PATH, CHECK_ICON_PATH
+    from src.config import ICON_PATH, CHECK_ICON_PATH, BASE_DIR
     from src import service, autostart, state, tools
 
 # --- ОКНО РЕДАКТОРА СПИСКОВ ---
@@ -26,6 +37,7 @@ class ListEditorWindow(QWidget):
     def init_ui(self):
         self.setWindowTitle("Sakura Blocklist Editor 📝")
         self.setFixedSize(400, 500)
+        self.setWindowIcon(QIcon(str(ICON_PATH))) # Иконка окна
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
         self.setStyleSheet("""
             QWidget { background-color: #0f0a12; color: #ffffff; font-family: 'Segoe UI'; }
@@ -36,7 +48,6 @@ class ListEditorWindow(QWidget):
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Domains (one per line):"))
         self.text_edit = QTextEdit()
-        # Загружаем текущий список
         self.text_edit.setPlainText(tools.read_blocklist())
         layout.addWidget(self.text_edit)
 
@@ -57,16 +68,16 @@ class NetworkToolsWindow(QWidget):
         super().__init__()
         self.restart_func = restart_func
         self.best_dns_found = None
-        self.list_editor = None # Для хранения ссылки на окно редактора
+        self.list_editor = None 
         self.init_ui()
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_stats)
         self.timer.start(1000)
 
     def init_ui(self):
-        self.setWindowTitle("Sakura Flow Tools 🛠️")
+        self.setWindowTitle("Sakura Flow Tools 🌸 by Ekcler")
         self.setFixedSize(400, 600)
-        self.setWindowIcon(QIcon(str(ICON_PATH)))
+        self.setWindowIcon(QIcon(str(ICON_PATH))) # Иконка окна
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
         self.setStyleSheet("""
             QWidget { background-color: #0f0a12; color: #ffffff; font-family: 'Segoe UI'; }
@@ -78,12 +89,10 @@ class NetworkToolsWindow(QWidget):
         """)
         layout = QVBoxLayout()
         
-        # 1. Блок списков
         layout.addWidget(QLabel("Blocklist Management:"))
         self.edit_list_btn = QPushButton("📝 Edit General Blocklist")
         layout.addWidget(self.edit_list_btn)
 
-        # 2. Пинг / Трассировка
         layout.addSpacing(10)
         layout.addWidget(QLabel("Network Utilities:"))
         self.host_input = QLineEdit(); self.host_input.setPlaceholderText("google.com")
@@ -93,7 +102,6 @@ class NetworkToolsWindow(QWidget):
         net_btn_layout.addWidget(self.ping_btn); net_btn_layout.addWidget(self.trace_btn)
         layout.addLayout(net_btn_layout)
 
-        # 3. DNS Оптимизатор
         layout.addSpacing(10)
         layout.addWidget(QLabel("DNS Optimizer & Tester:"))
         dns_input_layout = QHBoxLayout()
@@ -110,7 +118,6 @@ class NetworkToolsWindow(QWidget):
         self.apply_dns_btn = QPushButton("✅ Apply Best DNS"); self.apply_dns_btn.hide()
         layout.addWidget(self.apply_dns_btn)
 
-        # 4. Трафик и логи
         layout.addSpacing(10)
         self.traffic_label = QLabel("TRAFFIC | UP: 0.0 KB/s | DOWN: 0.0 KB/s")
         self.traffic_label.setStyleSheet("color: #50fa7b; font-family: 'Consolas'; font-size: 12px;")
@@ -120,7 +127,6 @@ class NetworkToolsWindow(QWidget):
         layout.addWidget(self.log_area)
         self.setLayout(layout)
 
-        # Привязка сигналов
         self.edit_list_btn.clicked.connect(self.open_list_editor)
         self.ping_btn.clicked.connect(self.run_ping_logic)
         self.trace_btn.clicked.connect(lambda: tools.run_tracert(self.host_input.text()) if self.host_input.text() else None)
@@ -130,7 +136,6 @@ class NetworkToolsWindow(QWidget):
         self.apply_dns_btn.clicked.connect(self.apply_best_dns)
 
     def open_list_editor(self):
-        # Сохраняем ссылку, чтобы окно не закрылось сразу
         self.list_editor = ListEditorWindow(self.restart_func)
         self.list_editor.show()
         self.list_editor.activateWindow()
@@ -162,7 +167,7 @@ class NetworkToolsWindow(QWidget):
     def run_reset_dns(self):
         s, i = tools.reset_system_dns(); self.log_area.append(f"DNS Reset: {s} ({i})")
 
-# --- ТРЕЙ-МЕНЕДЖЕР (БОЛЬШОЕ МЕНЮ) ---
+# --- ТРЕЙ-МЕНЕДЖЕР ---
 tools_window = None
 
 def open_tools(restart_func):
@@ -180,6 +185,8 @@ def update_menu_styles(start_menu, actions, active_version):
 
 def create_tray_app(bat_files):
     app = QApplication(sys.argv); app.setQuitOnLastWindowClosed(False)
+    app.setWindowIcon(QIcon(str(ICON_PATH))) # Иконка для всех окон приложения
+    
     tray = QSystemTrayIcon(QIcon(str(ICON_PATH))); tray.show()
     
     menu = QMenu()
@@ -198,7 +205,6 @@ def create_tray_app(bat_files):
                     threading.Thread(target=lambda: service.start_service(b, b.stem), daemon=True).start()
                     break
 
-    # 1. Start (Выпадающий список)
     start_menu = QMenu("  Start", menu); start_menu.setStyleSheet(menu.styleSheet())
     actions = {}
     for bat in bat_files:
@@ -207,26 +213,18 @@ def create_tray_app(bat_files):
         actions[bat] = action
     menu.addMenu(start_menu)
 
-    # 2. Internet Settings
     menu.addAction("  🌐 Internet Settings", lambda: subprocess.Popen("control ncpa.cpl", shell=True))
-    
-    # 3. Network Tools
     menu.addAction("  🛠️ Network Tools", lambda: open_tools(quick_restart))
-
     menu.addSeparator()
 
-    # 4. Stop
     menu.addAction("  Stop", lambda: (state.save_state(last_bat=None, stopped=True), threading.Thread(target=lambda: (service.stop_service(), service.delete_service(), update_menu_styles(start_menu, actions, None)), daemon=True).start()))
-
-    # 5. Autostart
+    
     autostart_action = menu.addAction("  Autostart")
     autostart_action.setCheckable(True)
     autostart_action.setChecked(autostart.is_autostart_enabled())
     autostart_action.toggled.connect(lambda chk: autostart.enable_autostart() if chk else autostart.disable_autostart())
 
     menu.addSeparator()
-
-    # 6. Exit
     menu.addAction("  Exit", lambda: (service.stop_service(), QApplication.quit()))
 
     tray.activated.connect(lambda r: menu.popup(QCursor.pos()) if r in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick) else None)
