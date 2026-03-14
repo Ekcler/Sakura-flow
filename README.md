@@ -19,7 +19,7 @@ An optimized desktop tray application for managing [zapret](https://github.com) 
 ```bash
 python -m src.main
 ```
-###Building
+### Building
 ```bash
 pyinstaller --noconfirm --onefile --windowed --uac-admin --icon "icons/moonstone.ico" --name "SakuraFlow" src/main.py
 ```
