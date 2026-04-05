@@ -281,19 +281,24 @@ def start_socks5_proxy(port=1080, host='127.0.0.1'):
             5: '91.108.56.100'
         }
 
-        test_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        test_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            test_sock.bind((host, port))
-            test_sock.close()
-        except OSError:
-            test_sock.close()
-            proc_info = _get_process_using_port(port)
-            if proc_info:
-                logging.error(f"[SOCKS5] Порт {port} уже используется процессом: {proc_info}")
-            else:
-                logging.error(f"[SOCKS5] Порт {port} уже используется (процесс не определён)")
-            return False
+        for attempt in range(3):
+            test_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            test_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                test_sock.bind((host, port))
+                test_sock.close()
+                break
+            except OSError:
+                test_sock.close()
+                if attempt < 2:
+                    time.sleep(0.5)
+                    continue
+                proc_info = _get_process_using_port(port)
+                if proc_info:
+                    logging.error(f"[SOCKS5] Порт {port} уже используется процессом: {proc_info}")
+                else:
+                    logging.error(f"[SOCKS5] Порт {port} уже используется (процесс не определён)")
+                return False
 
         _proxy_stop_event = asyncio.Event()
 
@@ -319,13 +324,10 @@ def stop_socks5_proxy():
                 _proxy_stop_event.set()
             except Exception as e:
                 logging.error(f"[SOCKS5] Ошибка сигнала остановки: {e}")
-        old_thread = _proxy_thread
         _proxy_thread = None
         _proxy_stop_event = None
         set_socks5_enabled(False)
-    if old_thread and old_thread.is_alive():
-        old_thread.join(timeout=5)
-    logging.info("[SOCKS5] Прокси остановлен")
+        logging.info("[SOCKS5] Прокси остановлен (сигнал отправлен)")
 
 
 def is_proxy_running():
