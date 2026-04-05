@@ -1010,6 +1010,11 @@ async def _handle_client(reader, writer):
         log.debug("[%s] cancelled", label)
     except ConnectionResetError:
         log.debug("[%s] connection reset", label)
+    except RuntimeError as exc:
+        if "Event loop is closed" in str(exc):
+            log.debug("[%s] event loop closed", label)
+        else:
+            log.error("[%s] unexpected: %s", label, exc)
     except Exception as exc:
         log.error("[%s] unexpected: %s", label, exc)
     finally:

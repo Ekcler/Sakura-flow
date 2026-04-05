@@ -27,17 +27,12 @@ def service_exists():
 
 def get_service_display_name():
     if not service_exists():
-        logging.info("[SERVICE] Сервис не существует")
         return None
     result = run_cmd(f'sc.exe qc "{SERVICE_NAME}"')
     if result and result.returncode == 0:
-        logging.info(f"[SERVICE] sc qc output: {result.stdout[:200]}")
         match = re.search(r'DISPLAY_NAME\s*:\s*(.+)', result.stdout)
         if match:
-            dn = match.group(1).strip()
-            logging.info(f"[SERVICE] Display name: {dn}")
-            return dn
-    logging.warning(f"[SERVICE] Не удалось получить display name, returncode={result.returncode if result else 'None'}")
+            return match.group(1).strip()
     return None
 
 
