@@ -30,9 +30,9 @@ else:
 try:
     import src  
     sys.modules['src'] = src
-    from src import admin, ui, config, service, tools
+    from src import admin, ui, config, service, tools, state
 except ImportError:
-    import admin, ui, config, service, tools
+    import admin, ui, config, service, tools, state
 
 try:
     import tg_ws_proxy 
@@ -51,20 +51,11 @@ logging.basicConfig(
 )
 
 def start_proxy_thread():
-    if not tg_ws_proxy:
-        logging.error("Движок прокси (tg_ws_proxy.py) не найден!")
-        return
+    return tools.start_socks5_proxy()
 
-    dc_opt = {
-        1: '149.154.175.50', 2: '149.154.167.220',
-        3: '149.154.175.100', 4: '149.154.167.220',
-        5: '91.108.56.100'
-    }
-    try:
-        logging.info("--- ЗАПУСК TG PROXY (127.0.0.1:1080) ---")
-        tg_ws_proxy.run_proxy(port=1080, dc_opt=dc_opt, host='127.0.0.1')
-    except Exception as e:
-        logging.error(f"Ошибка прокси: {e}")
+
+def stop_proxy_thread():
+    tools.stop_socks5_proxy()
 
 _current_bat = None
 _restart_func = None
@@ -82,6 +73,17 @@ def on_wake():
             logging.info("Служба перезапущена после пробуждения")
         except Exception as e:
             logging.error(f"Ошибка перезапуска службы: {e}")
+    
+    app_state = state.load_state()
+    if app_state.get("socks5_enabled", False):
+        time.sleep(3)
+        try:
+            stop_proxy_thread()
+            time.sleep(1)
+            start_proxy_thread()
+            logging.info("Прокси перезапущен после пробуждения")
+        except Exception as e:
+            logging.error(f"Ошибка перезапуска прокси: {e}")
 
 def register_sleep_handler(restart_func, current_bat):
     global _current_bat, _restart_func
@@ -120,6 +122,11 @@ def main():
     
     tools.start_auto_monitor()
     
+    app_state = state.load_state()
+    if app_state.get("socks5_enabled", False):
+        logging.info("[SOCKS5] Восстановление прокси после запуска")
+        start_proxy_thread()
+    
     bat_files = [
         f for f in config.BAT_DIR.glob("*.bat") 
         if f.name.lower() not in ["service.bat", "general.bat"]
@@ -128,6 +135,7 @@ def main():
     exit_code = ui.create_tray_app(bat_files, register_sleep_handler)
     
     tools.stop_auto_monitor()
+    stop_proxy_thread()
     
     sys.exit(exit_code)
 

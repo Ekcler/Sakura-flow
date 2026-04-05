@@ -4,6 +4,7 @@ import re
 import sys
 import threading
 import ctypes
+import logging
 from pathlib import Path
 
 from PyQt5.QtWidgets import (QApplication, QSystemTrayIcon, QMenu, QAction, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QTextEdit, QLabel, QMessageBox)
@@ -89,7 +90,10 @@ class NetworkToolsWindow(QWidget):
         self.timer.start(1000)
 
         if self._socks5_running:
-            self.start_socks5_proxy()
+            if tools.is_proxy_running():
+                self.log_area.append("SOCKS5 Proxy already running (started at boot)")
+            else:
+                self.start_socks5_proxy()
 
     def init_ui(self):
         self.setWindowTitle("Sakura Flow Tools by Ekcler")
@@ -212,56 +216,34 @@ class NetworkToolsWindow(QWidget):
             self.log_area.append("Proxy engine not available!")
             return
 
-        self._socks5_running = not self._socks5_running
-        if self._socks5_running:
-            try:
-                port = int(self.tg_port_input.text().strip() or "1080")
-                host = self.tg_host_input.text().strip() or "127.0.0.1"
-                dc_opt = {
-                    1: '149.154.175.50', 2: '149.154.167.220',
-                    3: '149.154.175.100', 4: '149.154.167.220',
-                    5: '91.108.56.100'
-                }
-                import socket
-                test_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                test_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                try:
-                    test_sock.bind((host, port))
-                    test_sock.close()
-                except OSError:
-                    test_sock.close()
-                    self._socks5_running = False
-                    self.log_area.append(f"Port {port} already in use!")
-                    self.socks5_toggle_btn.setText("ON")
-                    self.socks5_toggle_btn.setStyleSheet("""
-                        QPushButton { background-color: #1a3d1b; border: 1px solid #50fa7b; color: #50fa7b; font-weight: bold; padding: 10px; }
-                        QPushButton:hover { background-color: #2d4d2b; }
-                    """)
-                    return
-
-                self._proxy_thread = threading.Thread(
-                    target=tg_ws_proxy.run_proxy,
-                    args=(port, dc_opt, None, host),
-                    daemon=True)
-                self._proxy_thread.start()
-                self.socks5_toggle_btn.setText("OFF")
-                self.socks5_toggle_btn.setStyleSheet("""
-                    QPushButton { background-color: #2d1621; border: 1px solid #ff5555; color: #ff5555; font-weight: bold; padding: 10px; }
-                    QPushButton:hover { background-color: #3d1b28; }
-                """)
-                self.log_area.append(f"SOCKS5 Proxy started: {host}:{port}")
-                tools.set_socks5_enabled(True)
-            except Exception as e:
-                self._socks5_running = False
-                self.log_area.append(f"Error: {e}")
-        else:
+        if tools.is_proxy_running():
+            tools.stop_socks5_proxy()
+            self._socks5_running = False
             self.socks5_toggle_btn.setText("ON")
             self.socks5_toggle_btn.setStyleSheet("""
                 QPushButton { background-color: #1a3d1b; border: 1px solid #50fa7b; color: #50fa7b; font-weight: bold; padding: 10px; }
                 QPushButton:hover { background-color: #2d4d2b; }
             """)
             self.log_area.append("SOCKS5 Proxy stopped")
-            tools.set_socks5_enabled(False)
+        else:
+            try:
+                port = int(self.tg_port_input.text().strip() or "1080")
+                host = self.tg_host_input.text().strip() or "127.0.0.1"
+                success = tools.start_socks5_proxy(port=port, host=host)
+                if success:
+                    self._socks5_running = True
+                    self.socks5_toggle_btn.setText("OFF")
+                    self.socks5_toggle_btn.setStyleSheet("""
+                        QPushButton { background-color: #2d1621; border: 1px solid #ff5555; color: #ff5555; font-weight: bold; padding: 10px; }
+                        QPushButton:hover { background-color: #3d1b28; }
+                    """)
+                    self.log_area.append(f"SOCKS5 Proxy started: {host}:{port}")
+                else:
+                    self._socks5_running = False
+                    self.log_area.append(f"Failed to start SOCKS5 Proxy on {host}:{port}")
+            except Exception as e:
+                self._socks5_running = False
+                self.log_area.append(f"Error: {e}")
 
     def start_socks5_proxy(self):
         if not tg_ws_proxy:
@@ -269,39 +251,23 @@ class NetworkToolsWindow(QWidget):
         try:
             port = int(self.tg_port_input.text().strip() or "1080")
             host = self.tg_host_input.text().strip() or "127.0.0.1"
-            dc_opt = {
-                1: '149.154.175.50', 2: '149.154.167.220',
-                3: '149.154.175.100', 4: '149.154.167.220',
-                5: '91.108.56.100'
-            }
-            import socket
-            test_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            test_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            try:
-                test_sock.bind((host, port))
-                test_sock.close()
-            except OSError:
-                test_sock.close()
+            success = tools.start_socks5_proxy(port=port, host=host)
+            if success:
+                self._socks5_running = True
+                self.socks5_toggle_btn.setText("OFF")
+                self.socks5_toggle_btn.setStyleSheet("""
+                    QPushButton { background-color: #2d1621; border: 1px solid #ff5555; color: #ff5555; font-weight: bold; padding: 10px; }
+                    QPushButton:hover { background-color: #3d1b28; }
+                """)
+                self.log_area.append(f"SOCKS5 Proxy started: {host}:{port}")
+            else:
                 self._socks5_running = False
                 self.socks5_toggle_btn.setText("ON")
                 self.socks5_toggle_btn.setStyleSheet("""
                     QPushButton { background-color: #1a3d1b; border: 1px solid #50fa7b; color: #50fa7b; font-weight: bold; padding: 10px; }
                     QPushButton:hover { background-color: #2d4d2b; }
                 """)
-                tools.set_socks5_enabled(False)
-                return
-
-            self._proxy_thread = threading.Thread(
-                target=tg_ws_proxy.run_proxy,
-                args=(port, dc_opt, None, host),
-                daemon=True)
-            self._proxy_thread.start()
-            self.socks5_toggle_btn.setText("OFF")
-            self.socks5_toggle_btn.setStyleSheet("""
-                QPushButton { background-color: #2d1621; border: 1px solid #ff5555; color: #ff5555; font-weight: bold; padding: 10px; }
-                QPushButton:hover { background-color: #3d1b28; }
-            """)
-            self.log_area.append(f"SOCKS5 Proxy started: {host}:{port}")
+                self.log_area.append(f"Failed to start SOCKS5 Proxy on {host}:{port}")
         except Exception as e:
             self._socks5_running = False
             self.log_area.append(f"Error: {e}")
@@ -433,6 +399,24 @@ def create_tray_app(bat_files, register_sleep_handler=None):
         match = re.search(r'version\[([^\]]+)\]', display_name)
         if match:
             active_version = match.group(1)
+            logging.info(f"[UI] Active strategy: {active_version}")
+        else:
+            logging.warning(f"[UI] Display name found but version not parsed: {display_name}")
+    else:
+        logging.info("[UI] No active service found")
+
+    def refresh_active_version():
+        nonlocal active_version
+        dn = service.get_service_display_name()
+        if dn:
+            match = re.search(r'version\[([^\]]+)\]', dn)
+            if match:
+                active_version = match.group(1)
+        else:
+            active_version = None
+        update_menu_styles(start_menu, actions, active_version)
+
+    start_menu.aboutToShow.connect(refresh_active_version)
 
     update_menu_styles(start_menu, actions, active_version)
 

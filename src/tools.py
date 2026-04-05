@@ -4,6 +4,7 @@ import socket
 import threading
 import time
 import logging
+import asyncio
 from pathlib import Path
 from ping3 import ping
 
@@ -25,6 +26,10 @@ SOCKS5_ENABLED = _saved_state.get("socks5_enabled", False)
 _failed_domains = set()
 _monitor_thread = None
 _monitor_running = False
+
+_proxy_thread = None
+_proxy_stop_event = None
+_proxy_lock = threading.Lock()
 
 
 def get_ping(host):
@@ -237,6 +242,94 @@ def set_socks5_enabled(enabled):
     SOCKS5_ENABLED = enabled
     state.save_state(socks5_enabled=enabled)
     logging.info(f"[SOCKS5] Enabled: {enabled}")
+
+
+def _get_process_using_port(port):
+    try:
+        for conn in psutil.net_connections(kind='inet'):
+            if conn.laddr and conn.laddr.port == port:
+                if conn.pid:
+                    try:
+                        proc = psutil.Process(conn.pid)
+                        return f"{proc.name()} (PID {conn.pid})"
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        return f"PID {conn.pid}"
+        return None
+    except Exception:
+        return None
+
+
+def start_socks5_proxy(port=1080, host='127.0.0.1'):
+    global _proxy_thread, _proxy_stop_event
+    with _proxy_lock:
+        if _proxy_thread and _proxy_thread.is_alive():
+            logging.info("[SOCKS5] Прокси уже запущен")
+            return True
+
+        try:
+            import tg_ws_proxy
+        except ImportError:
+            try:
+                from src import tg_ws_proxy
+            except ImportError:
+                logging.error("[SOCKS5] Движок прокси не найден")
+                return False
+
+        dc_opt = {
+            1: '149.154.175.50', 2: '149.154.167.220',
+            3: '149.154.175.100', 4: '149.154.167.220',
+            5: '91.108.56.100'
+        }
+
+        test_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        test_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            test_sock.bind((host, port))
+            test_sock.close()
+        except OSError:
+            test_sock.close()
+            proc_info = _get_process_using_port(port)
+            if proc_info:
+                logging.error(f"[SOCKS5] Порт {port} уже используется процессом: {proc_info}")
+            else:
+                logging.error(f"[SOCKS5] Порт {port} уже используется (процесс не определён)")
+            return False
+
+        _proxy_stop_event = asyncio.Event()
+
+        def _run():
+            try:
+                logging.info(f"--- ЗАПУСК TG PROXY ({host}:{port}) ---")
+                tg_ws_proxy.run_proxy(port=port, dc_opt=dc_opt, stop_event=_proxy_stop_event, host=host)
+            except Exception as e:
+                logging.error(f"[SOCKS5] Ошибка прокси: {e}")
+
+        _proxy_thread = threading.Thread(target=_run, daemon=True)
+        _proxy_thread.start()
+        set_socks5_enabled(True)
+        logging.info(f"[SOCKS5] Прокси запущен на {host}:{port}")
+        return True
+
+
+def stop_socks5_proxy():
+    global _proxy_thread, _proxy_stop_event
+    with _proxy_lock:
+        if _proxy_stop_event:
+            try:
+                _proxy_stop_event.set()
+            except Exception as e:
+                logging.error(f"[SOCKS5] Ошибка сигнала остановки: {e}")
+        old_thread = _proxy_thread
+        _proxy_thread = None
+        _proxy_stop_event = None
+        set_socks5_enabled(False)
+    if old_thread and old_thread.is_alive():
+        old_thread.join(timeout=5)
+    logging.info("[SOCKS5] Прокси остановлен")
+
+
+def is_proxy_running():
+    return _proxy_thread is not None and _proxy_thread.is_alive()
 
 
 if AUTO_ADD_ENABLED:
