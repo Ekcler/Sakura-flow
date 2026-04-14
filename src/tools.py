@@ -876,3 +876,14 @@ def update_balancer_backends(backends):
     """Update balancer backend ports."""
     if _balancer:
         _balancer.update_backends(backends)
+
+
+def is_winws_running():
+    """Check if winws.exe process is running."""
+    try:
+        for proc in psutil.process_iter(['name']):
+            if proc.info['name'] and proc.info['name'].lower() == 'winws.exe':
+                return True
+    except Exception as e:
+        logging.warning(f"[winws] Check error: {e}")
+    return False

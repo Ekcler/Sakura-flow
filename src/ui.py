@@ -496,19 +496,44 @@ def create_tray_app(bat_files, register_sleep_handler=None):
         current_bat = app_state.get("last_bat")
         register_sleep_handler(quick_restart, current_bat)
 
-    start_menu = QMenu("  ⚡ Start", menu)
-    start_menu.setStyleSheet(menu.styleSheet())
-    actions = {}
-    for bat in bat_files:
-        action = start_menu.addAction(bat.stem)
-        action.triggered.connect(lambda checked, b=bat: (state.save_state(last_bat=b.stem, stopped=False), threading.Thread(target=lambda: service.start_service(b, b.stem), daemon=True).start(), update_menu_styles(start_menu, actions, b.stem)))
-        actions[bat] = action
+    def toggle_strategy(btn, actions):
+        """Toggle strategy on/off."""
+        if tools.is_winws_running():
+            state.save_state(last_bat=None, stopped=True)
+            threading.Thread(target=lambda: (service.stop_service(), service.delete_service(), update_start_btn(btn)), daemon=True).start()
+        else:
+            app_state = state.load_state()
+            last_bat = app_state.get("last_bat")
+            if not last_bat:
+                last_bat = bat_files[0].stem if bat_files else "zapret-general"
+            bat_path = None
+            for b in bat_files:
+                if b.stem == last_bat:
+                    bat_path = b
+                    break
+            if not bat_path:
+                bat_path = bat_files[0]
+            state.save_state(last_bat=bat_path.stem, stopped=False)
+            threading.Thread(target=lambda: service.start_service(bat_path, bat_path.stem), daemon=True).start()
+            update_start_btn(btn)
 
-    menu.addMenu(start_menu)
+    def update_start_btn(btn):
+        """Update Start button based on winws state."""
+        if tools.is_winws_running():
+            btn.setText("  ⏹️ Stop")
+            if CHECK_ICON_PATH.exists():
+                btn.setIcon(QIcon(str(CHECK_ICON_PATH)))
+        else:
+            btn.setText("  ⚡ Start")
+            btn.setIcon(QIcon())
+
+    start_btn = QAction("  ⚡ Start", menu)
+    update_start_btn(start_btn)
+    start_btn.triggered.connect(lambda: toggle_strategy(start_btn, {}))
+    menu.addAction(start_btn)
     menu.addAction("  🌐 Internet Settings", lambda: subprocess.Popen("control ncpa.cpl", shell=True))
-    menu.addAction("  🛠️ Network Tools", lambda: open_tools(quick_restart, start_menu, actions))
+    menu.addAction("  🛠️ Network Tools", lambda: open_tools(quick_restart, None, {}))
     menu.addSeparator()
-    menu.addAction("  ⏹️ Stop", lambda: (state.save_state(last_bat=None, stopped=True), threading.Thread(target=lambda: (service.stop_service(), service.delete_service(), update_menu_styles(start_menu, actions, None)), daemon=True).start()))
 
     autostart_action = menu.addAction("  🔄 Autostart")
     autostart_action.setCheckable(True)
@@ -520,32 +545,5 @@ def create_tray_app(bat_files, register_sleep_handler=None):
 
     tray.activated.connect(lambda r: menu.popup(QCursor.pos()) if r in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick) else None)
     tray.setContextMenu(menu)
-
-    display_name = service.get_service_display_name()
-    active_version = None
-    if display_name:
-        match = re.search(r'version\[([^\]]+)\]', display_name)
-        if match:
-            active_version = match.group(1)
-            logging.info(f"[UI] Active strategy: {active_version}")
-        else:
-            logging.warning(f"[UI] Display name found but version not parsed: {display_name}")
-    else:
-        logging.info("[UI] No active service found")
-
-    def refresh_active_version():
-        nonlocal active_version
-        dn = service.get_service_display_name()
-        if dn:
-            match = re.search(r'version\[([^\]]+)\]', dn)
-            if match:
-                active_version = match.group(1)
-        else:
-            active_version = None
-        update_menu_styles(start_menu, actions, active_version)
-
-    start_menu.aboutToShow.connect(refresh_active_version)
-
-    update_menu_styles(start_menu, actions, active_version)
 
     return app.exec_()
