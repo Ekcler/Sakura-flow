@@ -21,8 +21,8 @@ def enable_autostart():
         
         # Создаём задачу
         task_def = scheduler.NewTask(0)
-        task_def.RegistrationInfo.Description = 'Autostart Moonstone DPI Bypass Application'
-        task_def.RegistrationInfo.Author = 'Nixni Co.'
+        task_def.RegistrationInfo.Description = 'Autostart SakuraFlow'
+        task_def.RegistrationInfo.Author = 'Ekcler'
         
         # Настраиваем триггер на запуск при входе в систему
         trigger = task_def.Triggers.Create(9)  # 1 = TASK_TRIGGER_LOGON
