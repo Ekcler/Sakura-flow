@@ -500,7 +500,7 @@ def create_tray_app(bat_files, register_sleep_handler=None):
         """Toggle strategy on/off."""
         if tools.is_winws_running():
             state.save_state(last_bat=None, stopped=True)
-            threading.Thread(target=lambda: (service.stop_service(), service.delete_service(), update_start_btn(btn)), daemon=True).start()
+            threading.Thread(target=lambda: (service.stop_service(), service.delete_service(), update_start_btn(btn, False)), daemon=True).start()
         else:
             app_state = state.load_state()
             last_bat = app_state.get("last_bat")
@@ -515,11 +515,11 @@ def create_tray_app(bat_files, register_sleep_handler=None):
                 bat_path = bat_files[0]
             state.save_state(last_bat=bat_path.stem, stopped=False)
             threading.Thread(target=lambda: service.start_service(bat_path, bat_path.stem), daemon=True).start()
-            update_start_btn(btn)
+            update_start_btn(btn, True)
 
-    def update_start_btn(btn):
-        """Update Start button based on winws state."""
-        if tools.is_winws_running():
+    def update_start_btn(btn, running):
+        """Update Start button based on winws running state."""
+        if running:
             btn.setText("  ⏹️ Stop")
             if CHECK_ICON_PATH.exists():
                 btn.setIcon(QIcon(str(CHECK_ICON_PATH)))
@@ -528,7 +528,7 @@ def create_tray_app(bat_files, register_sleep_handler=None):
             btn.setIcon(QIcon())
 
     start_btn = QAction("  ⚡ Start", menu)
-    update_start_btn(start_btn)
+    update_start_btn(start_btn, tools.is_winws_running())
     start_btn.triggered.connect(lambda: toggle_strategy(start_btn, {}))
     menu.addAction(start_btn)
     menu.addAction("  🌐 Internet Settings", lambda: subprocess.Popen("control ncpa.cpl", shell=True))
