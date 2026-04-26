@@ -64,9 +64,7 @@ def start_proxy_thread():
             for proxy in enabled_proxies:
                 tools.start_socks5_proxy(port=proxy['port'], host=proxy['host'])
             
-            timeout = app_state.get("auto_switch_timeout", 5)
-            tools.set_auto_switch_config(True, timeout=timeout)
-            tools.start_auto_switch()
+            tools.start_auto_monitor()
             
             logging.info(f"[SOCKS5] Multi-proxy started: {len(enabled_proxies)} proxies, auto-switch enabled")
             return True
@@ -87,7 +85,7 @@ def start_proxy_thread():
 
 
 def stop_proxy_thread():
-    tools.stop_auto_switch()
+    tools.stop_auto_monitor()
     tools._stop_all_proxies()
 
 _current_bat = None
@@ -126,9 +124,7 @@ def on_wake():
                 for proxy in enabled_proxies:
                     tools.start_socks5_proxy(port=proxy['port'], host=proxy['host'])
                 
-                timeout = app_state.get("auto_switch_timeout", 5)
-                tools.set_auto_switch_config(True, timeout=timeout)
-                tools.start_auto_switch()
+                tools.start_auto_monitor()
                 
                 logging.info(f"Auto-switch перезапущен ({len(enabled_proxies)} proxies)")
             else:
